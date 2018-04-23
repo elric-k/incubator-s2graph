@@ -57,6 +57,7 @@ object JobDescription extends Logger {
   def getProcess(conf:TaskConf): task.Process = {
     conf.`type` match {
       case "sql" => new SqlProcess(conf)
+      case "grouped" => new GroupedProcess(conf)
       case "custom" =>
         val customClassOpt = conf.options.get("class")
         customClassOpt match {

@@ -68,7 +68,9 @@ class KafkaSource(conf:TaskConf) extends Source(conf) {
 
       case None =>
         logger.warn(s"${LOG_PREFIX} json format does not have schema.. use default schema ")
-        df
+
+
+        ss.read.json(df.selectExpr("CAST(value AS STRING)").toJSON)
     }
   }
 }
