@@ -27,12 +27,49 @@ import org.apache.s2graph.core.storage.MutateResponse
 import org.apache.s2graph.core.types._
 import org.apache.s2graph.graphql.types.S2Type._
 import org.slf4j.{Logger, LoggerFactory}
+import sangria.execution.deferred._
 import sangria.schema._
 
+import scala.collection.immutable
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
 object GraphRepository {
+
+  implicit val vertexHasId = new HasId[(VertexQueryParam, Seq[S2VertexLike]), VertexQueryParam] {
+    override def id(value: (VertexQueryParam, Seq[S2VertexLike])): VertexQueryParam = value._1
+  }
+
+  implicit val edgeHasId = new HasId[(EdgeQueryParam, Seq[S2EdgeLike]), EdgeQueryParam] {
+    override def id(value: (EdgeQueryParam, Seq[S2EdgeLike])): EdgeQueryParam = value._1
+  }
+
+  val vertexFetcher =
+    Fetcher((ctx: GraphRepository, queryParams: Seq[VertexQueryParam]) => {
+      implicit val ec = ctx.ec
+
+      Future.traverse(queryParams)(ctx.getVertices).map(vs => queryParams.zip(vs))
+    })
+
+  val edgeFetcher = Fetcher((ctx: GraphRepository, edgeQueryParams: Seq[EdgeQueryParam]) => {
+    implicit val ec = ctx.ec
+
+    val edgesByParam = edgeQueryParams.groupBy(_.qp).toSeq.map { case (qp, edgeQueryParams) =>
+      val vertices = edgeQueryParams.map(_.v)
+      ctx.getEdges(vertices, qp).map(edges => qp -> edges)
+    }
+
+    val f: Future[Seq[(QueryParam, Seq[S2EdgeLike])]] = Future.sequence(edgesByParam)
+    val grouped: Future[Seq[(EdgeQueryParam, Seq[S2EdgeLike])]] = f.map { tpLs =>
+      tpLs.flatMap { case (qp, edges) =>
+        edges.groupBy(_.srcForVertex).map {
+          case (v, edges) => EdgeQueryParam(v, qp) -> edges
+        }
+      }
+    }
+
+    grouped
+  })
 
   def withLogTryResponse[A](opName: String, tryObj: Try[A])(implicit logger: Logger): Try[A] = {
     tryObj match {
@@ -85,8 +122,18 @@ class GraphRepository(val graph: S2GraphLike) {
     graph.mutateEdges(edges, withWait = true)
   }
 
-  def getVertices(vertex: Seq[S2VertexLike]): Future[Seq[S2VertexLike]] = {
-    graph.getVertices(vertex)
+  def getVertices(queryParam: VertexQueryParam): Future[Seq[S2VertexLike]] = {
+    graph.asInstanceOf[S2Graph].searchVertices(queryParam).map { a =>
+      println(a)
+      a
+    }
+  }
+
+  def getEdges(vertices: Seq[S2VertexLike], queryParam: QueryParam): Future[Seq[S2EdgeLike]] = {
+    val step = Step(Seq(queryParam))
+    val q = Query(vertices, steps = Vector(step))
+
+    graph.getEdges(q).map(_.edgeWithScores.map(_.edge))
   }
 
   def getEdges(vertex: S2VertexLike, queryParam: QueryParam): Future[Seq[S2EdgeLike]] = {
@@ -232,13 +279,9 @@ class GraphRepository(val graph: S2GraphLike) {
     withLogTryResponse("deleteLabel", deleteLabelTry)
   }
 
-  def allServices(): List[Service] = Service.findAll()
+  def services(): List[Service] = Service.findAll()
 
-  def allServiceColumns(): List[ServiceColumn] = ServiceColumn.findAll()
+  def serviceColumns(): List[ServiceColumn] = ServiceColumn.findAll()
 
-  def findServiceByName(name: String): Option[Service] = Service.findByName(name)
-
-  def allLabels() = Label.findAll()
-
-  def findLabelByName(name: String): Option[Label] = Label.findByName(name)
+  def labels() = Label.findAll()
 }

@@ -19,20 +19,19 @@
 
 package org.apache.s2graph.graphql.types
 
-import scala.concurrent._
-import org.apache.s2graph.core.Management.JsonModel.{Index, Prop}
+import org.apache.s2graph.core.Management.JsonModel._
 import org.apache.s2graph.core._
 import org.apache.s2graph.core.mysqls._
 import org.apache.s2graph.graphql
 import org.apache.s2graph.graphql.repository.GraphRepository
 import sangria.schema._
-import org.apache.s2graph.graphql.bind.AstHelper
-import org.apache.s2graph.graphql.repository
 import org.apache.s2graph.graphql.types.StaticTypes._
 
 import scala.language.existentials
 
 object S2Type {
+
+  case class EdgeQueryParam(v: S2VertexLike, qp: QueryParam)
 
   case class AddVertexParam(timestamp: Long,
                             id: Any,
@@ -137,15 +136,17 @@ object S2Type {
         ListType(ColumnType),
         arguments = List(
           Argument("id", OptionInputType(toScalarType(column.columnType))),
-          Argument("ids", OptionInputType(ListInputType(toScalarType(column.columnType))))
+          Argument("ids", OptionInputType(ListInputType(toScalarType(column.columnType)))),
+          Argument("search", OptionInputType(StringType)),
+          Argument("offset", OptionInputType(IntType), defaultValue = 0),
+          Argument("limit", OptionInputType(IntType), defaultValue = 100)
         ),
         description = Option("desc here"),
         resolve = c => {
           implicit val ec = c.ctx.ec
-          val (vertices, canSkipFetchVertex) = graphql.types.FieldResolver.serviceColumnOnService(column, c)
 
-          if (canSkipFetchVertex) Future.successful(vertices)
-          else c.ctx.getVertices(vertices)
+          val vertexQueryParam = FieldResolver.serviceColumnOnService(column, c)
+          DeferredValue(GraphRepository.vertexFetcher.defer(vertexQueryParam)).map(m => m._2)
         }
       ): Field[GraphRepository, Any]
     }
@@ -170,10 +171,9 @@ object S2Type {
 
     lazy val serviceColumnField: Field[GraphRepository, Any] = Field(column.columnName, labelColumnType, resolve = c => {
       implicit val ec = c.ctx.ec
-      val (vertex, canSkipFetchVertex) = graphql.types.FieldResolver.serviceColumnOnLabel(c)
+      val vertexQueryParam = FieldResolver.serviceColumnOnLabel(c)
 
-      if (canSkipFetchVertex) Future.successful(vertex)
-      else c.ctx.getVertices(Seq(vertex)).map(_.head) // fill props
+      DeferredValue(GraphRepository.vertexFetcher.defer(vertexQueryParam)).map(m => m._2.head)
     })
 
     lazy val EdgeType = ObjectType(
@@ -211,14 +211,17 @@ object S2Type {
       arguments = dirArgs ++ paramArgs,
       description = Some("fetch edges"),
       resolve = { c =>
-        val (vertex, queryParam) = graphql.types.FieldResolver.label(label, c)
-        c.ctx.getEdges(vertex, queryParam)
+        implicit val ec = c.ctx.ec
+
+        val edgeQueryParam = graphql.types.FieldResolver.label(label, c)
+        val empty = Seq.empty[S2EdgeLike]
+
+        DeferredValue(GraphRepository.edgeFetcher.deferOpt(edgeQueryParam)).map(m => m.fold(empty)(_._2))
       }
     )
 
     edgeTypeField
   }
-
 }
 
 class S2Type(repo: GraphRepository) {
@@ -231,8 +234,8 @@ class S2Type(repo: GraphRepository) {
   /**
     * fields
     */
-  lazy val serviceFields: List[Field[GraphRepository, Any]] = repo.allServices.map { service =>
-    lazy val serviceFields = DummyObjectTypeField :: makeServiceField(service, repo.allLabels())
+  lazy val serviceFields: List[Field[GraphRepository, Any]] = repo.services().map { service =>
+    lazy val serviceFields = DummyObjectTypeField :: makeServiceField(service, repo.labels())
 
     lazy val ServiceType = ObjectType(
       s"Service_${service.serviceName}",
@@ -251,7 +254,7 @@ class S2Type(repo: GraphRepository) {
     * arguments
     */
   lazy val addVertexArg = {
-    val serviceArguments = repo.allServices().map { service =>
+    val serviceArguments = repo.services().map { service =>
       val serviceFields = DummyInputField +: makeInputFieldsOnService(service)
 
       val ServiceInputType = InputObjectType[List[AddVertexParam]](
@@ -265,7 +268,7 @@ class S2Type(repo: GraphRepository) {
   }
 
   lazy val addEdgeArg = {
-    val labelArguments = repo.allLabels().map { label =>
+    val labelArguments = repo.labels().map { label =>
       val labelFields = DummyInputField +: makeInputFieldsOnLabel(label)
       val labelInputType = InputObjectType[AddEdgeParam](
         s"Input_label_${label.label}_param",
