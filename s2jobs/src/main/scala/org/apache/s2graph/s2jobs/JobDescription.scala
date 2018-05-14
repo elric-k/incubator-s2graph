@@ -59,6 +59,7 @@ object JobDescription extends Logger {
     conf.`type` match {
       case "sql" => new SqlProcess(conf)
       case "grouped" => new GroupedProcess(conf)
+      case "topn" => new TopN(conf)
       case "custom" =>
         val customClassOpt = conf.options.get("class")
         customClassOpt match {
