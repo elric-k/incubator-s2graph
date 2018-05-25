@@ -21,28 +21,34 @@ package org.apache.s2graph.s2jobs
 
 import play.api.libs.json.{JsValue, Json}
 import org.apache.s2graph.s2jobs.task._
+import org.apache.s2graph.s2jobs.udfs.UdfOption
 
 case class JobDescription(
                            name:String,
+                           options: Map[String, String],
+                           udfs: Seq[UdfOption],
                            sources:Seq[Source],
-                           processes:Seq[task.Process],
+                           processes:Seq[Process],
                            sinks:Seq[Sink]
                          )
 
 object JobDescription extends Logger {
-  val dummy = JobDescription("dummy", Nil, Nil, Nil)
+  val dummy = JobDescription("dummy", Map.empty, Nil, Nil, Nil, Nil)
 
   def apply(jsVal:JsValue):JobDescription = {
     implicit val TaskConfReader = Json.reads[TaskConf]
+    implicit val UdfOptionReader = Json.reads[UdfOption]
 
     logger.debug(s"JobDescription: ${jsVal}")
 
     val jobName = (jsVal \ "name").as[String]
-    val sources = (jsVal \ "source").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSource(conf))
+    val jobOptions = (jsVal \ "options").asOpt[Map[String, String]].getOrElse(Map.empty)
+    val udfs = (jsVal \ "udfs").asOpt[Seq[UdfOption]].getOrElse(Nil)
+    val sources = (jsVal \ "source").as[Seq[TaskConf]].map(conf => getSource(conf))
     val processes = (jsVal \ "process").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getProcess(conf))
-    val sinks = (jsVal \ "sink").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSink(jobName, conf))
+    val sinks = (jsVal \ "sink").as[Seq[TaskConf]].map(conf => getSink(jobName, conf))
 
-    JobDescription(jobName, sources, processes, sinks)
+    JobDescription(jobName, jobOptions, udfs, sources, processes, sinks)
   }
 
   def getSource(conf:TaskConf):Source = {
