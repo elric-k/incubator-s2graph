@@ -21,6 +21,7 @@ package org.apache.s2graph.s2jobs.task
 
 import org.apache.s2graph.core.Management
 import org.apache.s2graph.s2jobs.Schema
+import org.apache.s2graph.s2jobs.Schema.BulkLoadSchema
 import org.apache.s2graph.s2jobs.loader.{HFileGenerator, SparkBulkLoaderTransformer}
 import org.apache.s2graph.s2jobs.serde.reader.S2GraphCellReader
 import org.apache.s2graph.s2jobs.serde.writer.RowDataFrameWriter
@@ -89,6 +90,28 @@ class KafkaSource(conf:TaskConf) extends Source(conf) {
   }
 }
 
+class FileStreamSource(conf:TaskConf) extends Source(conf) {
+  val DEFAULT_FORMAT = "parquet"
+  override def mandatoryOptions: Set[String] = Set("path")
+
+  override def toDF(ss: SparkSession): DataFrame = {
+    import org.apache.s2graph.s2jobs.Schema._
+
+    val format = conf.options.getOrElse("format", DEFAULT_FORMAT)
+    val columnsOpt = conf.options.get("columns")
+
+    format match {
+      case "edgeLog" =>
+        val opts = conf.options ++ Map("delimiter" -> "\t")
+        ss.readStream.format("com.databricks.spark.csv").options(opts).schema(BulkLoadSchema).load()
+      case _ =>
+        val df = ss.readStream.format(format).options(conf.options).load()
+        if (columnsOpt.isDefined) df.toDF(columnsOpt.get.split(",").map(_.trim): _*) else df
+    }
+  }
+
+}
+
 class FileSource(conf:TaskConf) extends Source(conf) {
   val DEFAULT_FORMAT = "parquet"
   override def mandatoryOptions: Set[String] = Set("paths")
@@ -103,7 +126,7 @@ class FileSource(conf:TaskConf) extends Source(conf) {
       case "edgeLog" =>
         ss.read.format("com.databricks.spark.csv").option("delimiter", "\t")
           .schema(BulkLoadSchema).load(paths: _*)
-      case _ => ss.read.format(format).load(paths: _*)
+      case _ =>
         val df = ss.read.format(format).load(paths: _*)
         if (columnsOpt.isDefined) df.toDF(columnsOpt.get.split(",").map(_.trim): _*) else df
     }

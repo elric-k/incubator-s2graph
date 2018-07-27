@@ -49,6 +49,7 @@ object JobDescription extends Logger {
     conf.`type` match {
       case "kafka" => new KafkaSource(conf)
       case "file"  => new FileSource(conf)
+      case "fileStream"  => new FileStreamSource(conf)
       case "hive" => new HiveSource(conf)
       case "s2graph" => new S2GraphSource(conf)
       case _ => throw new IllegalArgumentException(s"unsupported source type : ${conf.`type`}")
