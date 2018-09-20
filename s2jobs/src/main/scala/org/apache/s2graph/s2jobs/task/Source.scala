@@ -21,7 +21,6 @@ package org.apache.s2graph.s2jobs.task
 
 import org.apache.s2graph.core.Management
 import org.apache.s2graph.s2jobs.Schema
-import org.apache.s2graph.s2jobs.Schema.BulkLoadSchema
 import org.apache.s2graph.s2jobs.loader.{HFileGenerator, SparkBulkLoaderTransformer}
 import org.apache.s2graph.s2jobs.serde.reader.S2GraphCellReader
 import org.apache.s2graph.s2jobs.serde.writer.RowDataFrameWriter
@@ -99,13 +98,21 @@ class FileStreamSource(conf:TaskConf) extends Source(conf) {
 
     val format = conf.options.getOrElse("format", DEFAULT_FORMAT)
     val columnsOpt = conf.options.get("columns")
+    val sampleFilePathOpt = conf.options.get("sample_file_path")
+    val sampleFileFormatOpt = conf.options.get("sample_file_format")
 
     format match {
       case "edgeLog" =>
         val opts = conf.options ++ Map("delimiter" -> "\t")
         ss.readStream.format("com.databricks.spark.csv").options(opts).schema(BulkLoadSchema).load()
       case _ =>
-        val df = ss.readStream.format(format).options(conf.options).load()
+        val ds = ss.readStream.format(format).options(conf.options)
+
+        val df = if (sampleFilePathOpt.isDefined) {
+          val sampleDF = ss.read.format(sampleFileFormatOpt.getOrElse("parquet")).load(sampleFilePathOpt.get)
+          ds.schema(sampleDF.schema).load()
+        } else ds.load()
+
         if (columnsOpt.isDefined) df.toDF(columnsOpt.get.split(",").map(_.trim): _*) else df
     }
   }
