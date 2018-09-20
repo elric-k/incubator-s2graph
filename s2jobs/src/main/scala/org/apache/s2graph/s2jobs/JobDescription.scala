@@ -25,14 +25,15 @@ import org.apache.s2graph.s2jobs.udfs.UdfOption
 
 case class JobDescription(
                            name:String,
-                           udfs: Seq[UdfOption],
                            sources:Seq[Source],
                            processes:Seq[task.Process],
-                           sinks:Seq[Sink]
+                           sinks:Seq[Sink],
+                           udfs: Seq[UdfOption] = Nil,
+                           listener:Option[Map[String, String]] = None
                          )
 
 object JobDescription extends Logger {
-  val dummy = JobDescription("dummy", Nil, Nil, Nil, Nil)
+  val dummy = JobDescription("dummy", Nil, Nil, Nil)
 
   def apply(jsVal:JsValue):JobDescription = {
     implicit val TaskConfReader = Json.reads[TaskConf]
@@ -41,12 +42,13 @@ object JobDescription extends Logger {
     logger.debug(s"JobDescription: ${jsVal}")
 
     val jobName = (jsVal \ "name").as[String]
-    val udfs = (jsVal \ "udfs").asOpt[Seq[UdfOption]].getOrElse(Nil)
     val sources = (jsVal \ "source").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSource(conf))
     val processes = (jsVal \ "process").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getProcess(conf))
     val sinks = (jsVal \ "sink").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSink(jobName, conf))
+    val udfs = (jsVal \ "udfs").asOpt[Seq[UdfOption]].getOrElse(Nil)
+    val listenerOpt = (jsVal \ "listener").asOpt[Map[String, String]]
 
-    JobDescription(jobName, udfs, sources, processes, sinks)
+    JobDescription(jobName, sources, processes, sinks, udfs, listenerOpt)
   }
 
   def getSource(conf:TaskConf):Source = {

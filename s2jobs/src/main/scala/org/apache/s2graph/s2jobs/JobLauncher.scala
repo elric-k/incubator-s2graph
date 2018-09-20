@@ -19,6 +19,7 @@
 
 package org.apache.s2graph.s2jobs
 
+import org.apache.s2graph.s2jobs.listener.KafkaStreamingListener
 import org.apache.s2graph.s2jobs.udfs.Udf
 import org.apache.spark.sql.SparkSession
 import play.api.libs.json.{JsValue, Json}
@@ -33,6 +34,8 @@ case class JobOption(
                     )
 
 object JobLauncher extends Logger {
+
+
 
   def parseArguments(args: Array[String]): JobOption = {
     val parser = new scopt.OptionParser[JobOption]("run") {
@@ -90,6 +93,10 @@ object JobLauncher extends Logger {
       udf.register(ss, udfOption.name, udfOption.params.getOrElse(Map.empty))
     }
 
+    // listener
+    jobDescription.listener.foreach { options =>
+      ss.streams.addListener(new KafkaStreamingListener(options))
+    }
     val job = new Job(ss, jobDescription)
     job.run()
   }
