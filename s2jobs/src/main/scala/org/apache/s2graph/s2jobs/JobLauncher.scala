@@ -19,6 +19,11 @@
 
 package org.apache.s2graph.s2jobs
 
+<<<<<<< HEAD
+=======
+import org.apache.s2graph.s2jobs.listener.KafkaStreamingListener
+import org.apache.s2graph.s2jobs.udfs.Udf
+>>>>>>> 9f3a5db5... add KafkaStreamingListener
 import org.apache.spark.sql.SparkSession
 import play.api.libs.json.{JsValue, Json}
 
@@ -32,6 +37,8 @@ case class JobOption(
                     )
 
 object JobLauncher extends Logger {
+
+
 
   def parseArguments(args: Array[String]): JobOption = {
     val parser = new scopt.OptionParser[JobOption]("run") {
@@ -82,6 +89,10 @@ object JobLauncher extends Logger {
       .enableHiveSupport()
       .getOrCreate()
 
+    // listener
+    jobDescription.listener.foreach { options =>
+      ss.streams.addListener(new KafkaStreamingListener(options))
+    }
     val job = new Job(ss, jobDescription)
     job.run()
   }

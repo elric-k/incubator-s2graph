@@ -26,7 +26,8 @@ case class JobDescription(
                            name:String,
                            sources:Seq[Source],
                            processes:Seq[task.Process],
-                           sinks:Seq[Sink]
+                           sinks:Seq[Sink],
+                           listener:Option[Map[String, String]] = None
                          )
 
 object JobDescription extends Logger {
@@ -41,8 +42,9 @@ object JobDescription extends Logger {
     val sources = (jsVal \ "source").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSource(conf))
     val processes = (jsVal \ "process").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getProcess(conf))
     val sinks = (jsVal \ "sink").asOpt[Seq[TaskConf]].getOrElse(Nil).map(conf => getSink(jobName, conf))
+    val listenerOpt = (jsVal \ "listener").asOpt[Map[String, String]]
 
-    JobDescription(jobName, sources, processes, sinks)
+    JobDescription(jobName, sources, processes, sinks, listenerOpt)
   }
 
   def getSource(conf:TaskConf):Source = {
