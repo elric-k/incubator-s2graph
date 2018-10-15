@@ -110,6 +110,14 @@ class FileSource(conf:TaskConf) extends Source(conf) {
   }
 }
 
+class JdbcSource(conf:TaskConf) extends Source(conf) {
+  override def mandatoryOptions: Set[String] = Set("url", "dbtable")
+
+  override def toDF(ss: SparkSession): DataFrame = {
+    ss.read.format("jdbc").options(conf.options).load()
+  }
+}
+
 class HiveSource(conf:TaskConf) extends Source(conf) {
   override def mandatoryOptions: Set[String] = Set("database", "table")
 
