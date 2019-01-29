@@ -19,12 +19,13 @@
 
 package org.apache.s2graph.s2jobs.task
 
-import org.apache.s2graph.core.Management
+import org.apache.s2graph.core.{JSONParser, Management}
 import org.apache.s2graph.s2jobs.Schema
 import org.apache.s2graph.s2jobs.loader.{HFileGenerator, SparkBulkLoaderTransformer}
 import org.apache.s2graph.s2jobs.serde.reader.S2GraphCellReader
 import org.apache.s2graph.s2jobs.serde.writer.RowDataFrameWriter
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import play.api.libs.json.{JsObject, Json}
 
 
 /**
@@ -128,13 +129,21 @@ class FileSource(conf:TaskConf) extends Source(conf) {
     val paths = conf.options("paths").split(",")
     val format = conf.options.getOrElse("format", DEFAULT_FORMAT)
     val columnsOpt = conf.options.get("columns")
+    val readOptions = conf.options.get("read").map { s =>
+      Json.parse(s).as[JsObject].fields.map { case (k, jsValue) =>
+        k -> JSONParser.jsValueToString(jsValue)
+      }.toMap
+    }.getOrElse(Map.empty)
 
     format match {
       case "edgeLog" =>
         ss.read.format("com.databricks.spark.csv").option("delimiter", "\t")
           .schema(BulkLoadSchema).load(paths: _*)
       case _ =>
-        val df = ss.read.format(format).load(paths: _*)
+        val df =
+          if (readOptions.isEmpty) ss.read.format(format).load(paths: _*)
+          else ss.read.options(readOptions).format(format).load(paths: _*)
+
         if (columnsOpt.isDefined) df.toDF(columnsOpt.get.split(",").map(_.trim): _*) else df
     }
   }
@@ -150,6 +159,14 @@ class HiveSource(conf:TaskConf) extends Source(conf) {
     val sql = conf.options.getOrElse("sql", s"SELECT * FROM ${database}.${table}")
     ss.sql(sql)
   }
+}
+
+class JdbcSource(conf:TaskConf) extends Source(conf) {
+  override def mandatoryOptions: Set[String] = Set("url", "dbtable")
+  override def toDF(ss: SparkSession): DataFrame = {
+    ss.read.format("jdbc").options(conf.options).load()
+  }
+
 }
 
 class S2GraphSource(conf: TaskConf) extends Source(conf) {
