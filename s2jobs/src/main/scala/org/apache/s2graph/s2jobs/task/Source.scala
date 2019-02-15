@@ -37,6 +37,20 @@ abstract class Source(override val conf:TaskConf) extends Task {
   def toDF(ss:SparkSession):DataFrame
 }
 
+class DefaultSource(conf:TaskConf) extends Source(conf) {
+  override def mandatoryOptions: Set[String] = Set("format")
+
+  override def toDF(ss: SparkSession): DataFrame = {
+    val isStreamSource = conf.options.getOrElse("is_stream_source", "false").toBoolean
+
+    if (isStreamSource) {
+      ss.readStream.options(conf.options).load()
+    } else {
+      ss.read.options(conf.options).load()
+    }
+
+  }
+}
 class KafkaSource(conf:TaskConf) extends Source(conf) {
   val DEFAULT_FORMAT = "raw"
   override def mandatoryOptions: Set[String] = Set("kafka.bootstrap.servers", "subscribe")

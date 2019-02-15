@@ -69,7 +69,11 @@ object JobDescription extends Logger {
 
           case None => throw new IllegalArgumentException(s"custom class name is not exist.. ${conf}")
         }
-      case _ => throw new IllegalArgumentException(s"unsupported source type : ${conf.`type`}")
+      case _ =>
+        val newOptions = conf.options ++ Map("format" -> conf.`type`)
+        val newConf = conf.copy(options = newOptions)
+        new DefaultSource(newConf)
+//        throw new IllegalArgumentException(s"unsupported source type : ${conf.`type`}")
     }
   }
 
