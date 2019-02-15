@@ -105,6 +105,7 @@ object JobDescription extends Logger {
       case "es" => new ESSink(jobName, conf)
       case "s2graph" => new S2GraphSink(jobName, conf)
       case "jdbc" => new JdbcSink(jobName, conf)
+      case "hive" => new HiveSink(jobName, conf)
       case "custom" =>
         val customClassOpt = conf.options.get("class")
         customClassOpt match {

@@ -171,7 +171,7 @@ class HiveSink(queryName: String, conf: TaskConf) extends Sink(queryName, conf) 
     val database = conf.options("database")
     val table = conf.options("table")
 
-    writer.insertInto(s"${database}.${table}")
+    writer.options(conf.options).insertInto(s"${database}.${table}")
   }
 
   override protected def writeStream(writer: DataStreamWriter[Row]): Unit =
