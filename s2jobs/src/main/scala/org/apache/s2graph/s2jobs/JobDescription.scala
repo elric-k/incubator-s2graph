@@ -56,6 +56,19 @@ object JobDescription extends Logger {
       case "hive" => new HiveSource(conf)
       case "jdbc" => new JdbcSource(conf)
       case "s2graph" => new S2GraphSource(conf)
+      case "custom" =>
+        val customClassOpt = conf.options.get("class")
+        customClassOpt match {
+          case Some(customClass:String) =>
+            logger.debug(s"custom class init.. $customClass")
+
+            Class.forName(customClass)
+              .getConstructor(classOf[TaskConf])
+              .newInstance(conf)
+              .asInstanceOf[task.Source]
+
+          case None => throw new IllegalArgumentException(s"custom class name is not exist.. ${conf}")
+        }
       case _ => throw new IllegalArgumentException(s"unsupported source type : ${conf.`type`}")
     }
   }
