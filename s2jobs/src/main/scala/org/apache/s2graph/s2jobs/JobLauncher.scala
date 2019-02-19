@@ -86,6 +86,11 @@ object JobLauncher extends Logger {
       .enableHiveSupport()
       .getOrCreate()
 
+    // TODO : additional conf set
+    ss.conf.set("hive.exec.dynamic.partition", "true")
+    ss.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
+    ss.conf.set("hive.exec.max.dynamic.partitions", "10000")
+
     // register udfs
     jobDescription.udfs.foreach{ udfOption =>
       val udf = Class.forName(udfOption.`class`).newInstance().asInstanceOf[Udf]
