@@ -103,8 +103,7 @@ abstract class Sink(queryName: String, override val conf: TaskConf) extends Task
   protected def repartition(df: DataFrame, defaultParallelism: Int) = {
     conf.options.get("numPartitions").map(n => Integer.parseInt(n)) match {
       case Some(numOfPartitions: Int) =>
-        if (numOfPartitions > defaultParallelism) df.repartition(numOfPartitions)
-        else df.coalesce(numOfPartitions)
+        if (numOfPartitions > df.rdd.getNumPartitions) df.repartition(numOfPartitions) else df.coalesce(numOfPartitions)
       case None => df
     }
   }
