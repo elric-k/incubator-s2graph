@@ -62,9 +62,12 @@ object JobLauncher extends Logger {
     }
   }
 
-  def getConfig(options: JobOption):JsValue = options.confType match {
+  def getConfig(options: JobOption, ss:SparkSession):JsValue = options.confType match {
     case "file" =>
-      Json.parse(Source.fromFile(options.confFile).mkString)
+      val confStr = if (options.confFile.startsWith("s3://")) {
+        ss.sparkContext.textFile(options.confFile).collect().mkString("")
+      } else Source.fromFile(options.confFile).mkString
+      Json.parse(confStr)
     case "db" =>
       throw new IllegalArgumentException(s"'db' option that read config file from database is not supported yet.. ")
   }
@@ -74,15 +77,14 @@ object JobLauncher extends Logger {
     val options = parseArguments(args)
     logger.info(s"Job Options : ${options}")
 
-    val jobDescription = JobDescription(getConfig(options))
-
     val ss = SparkSession
       .builder()
-      .appName(s"${jobDescription.name}")
+      .appName(s"${options.name}")
       .config("spark.driver.maxResultSize", "20g")
       .enableHiveSupport()
       .getOrCreate()
 
+    val jobDescription = JobDescription(getConfig(options, ss))
     // register udfs
     jobDescription.udfs.foreach{ udfOption =>
       val udf = Class.forName(udfOption.`class`).newInstance().asInstanceOf[Udf]

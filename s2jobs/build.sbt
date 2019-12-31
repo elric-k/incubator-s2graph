@@ -21,6 +21,8 @@ import Common._
 
 name := "s2jobs"
 
+version := "0.2.2-SNAPSHOT"
+
 scalacOptions ++= Seq("-deprecation")
 
 projectDependencies := Seq(
